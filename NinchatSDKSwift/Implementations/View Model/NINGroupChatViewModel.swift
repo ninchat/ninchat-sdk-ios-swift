@@ -5,6 +5,7 @@
 //
 
 import UIKit
+import AVFoundation
 
 protocol NINGroupChatViewModel: AnyObject, NINChatStateProtocol, NINChatMessageProtocol, NINChatPermissionsProtocol, NINChatAttachmentProtocol {
     var hasJoinedVideo: Bool { get }
@@ -31,6 +32,34 @@ final class NINGroupChatViewModelImpl: NSObject, NINGroupChatViewModel {
     var hasJoinedVideo: Bool {
         jitsiVideoWebView != nil
        // jitsiView?.delegate != nil
+    }
+
+    private func configureAudioSessionForMic(preferBluetooth: Bool) throws {
+        let session = AVAudioSession.sharedInstance()
+        var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker]
+        if preferBluetooth { options.insert(.allowBluetooth) }
+        try session.setCategory(.playAndRecord, options: options)
+        try session.setMode(.videoChat)
+        try session.setActive(true, options: [])
+    }
+
+
+    /// Select a preferred input port (e.g. .bluetoothHFP, .builtInMic). Call after activating the session.
+    private func selectPreferredInput(_ port: AVAudioSession.Port) throws {
+        guard let target = AVAudioSession.sharedInstance().availableInputs?.first(where: { $0.portType == port }) else { return }
+        try AVAudioSession.sharedInstance().setPreferredInput(target)
+    }
+
+
+    /// Release any input preference and deactivate the session politely.
+    private func resetAudioSession() {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setPreferredInput(nil)
+            try session.setActive(false, options: [.notifyOthersOnDeactivation])
+        } catch {
+            print("[NINGroupChatViewModel] Failed to reset audio session: \(error)")
+        }
     }
 
     var backlogMessages: String? {
@@ -107,25 +136,28 @@ final class NINGroupChatViewModelImpl: NSObject, NINGroupChatViewModel {
                 guard let self = self, let sessionManager = self.sessionManager else {
                     return
                 }
+
                 switch result {
                 case nil:
                     completion(NinchatError(type: "unknown", props: nil))
                 case let .failure(error):
                     completion(error)
                 case let .success(credentials):
-                    // User
-                    let user = sessionManager.myUser
+                    // 1. Audio session *only* after discovery succeeded
+                    do {
+                        try self.configureAudioSessionForMic(preferBluetooth: true)
+                        try self.selectPreferredInput(.bluetoothHFP)
+                    } catch {
+                        self.resetAudioSession()           
+                        completion(error)
+                        return
+                    }
 
-                    // Use imageOverrideURL or iconURL (if available) or default to nil if both are absent.
+                    let user = sessionManager.myUser
                     let avatarConfig = AvatarConfig(forUser: sessionManager)
                     let iconURLString = avatarConfig.imageOverrideURL ?? user?.iconURL
+                    let userName = !avatarConfig.nameOverride.isEmpty ? avatarConfig.nameOverride : (user?.displayName ?? "Guest".localized)
 
-                    // Choose nameOverride if available, otherwise use user's displayName or a default "Guest" label.
-                    let userName = !avatarConfig.nameOverride.isEmpty
-                        ? avatarConfig.nameOverride
-                        : (user?.displayName ?? "Guest".localized)
-
-                    // Get server address
                     var serverAddress: String = sessionManager.serverAddress
                     let apiPrefix = "api."
                     if serverAddress.hasPrefix(apiPrefix) {
@@ -133,21 +165,17 @@ final class NINGroupChatViewModelImpl: NSObject, NINGroupChatViewModel {
                         serverAddress.removeSubrange(serverAddress.startIndex ..< endIdx)
                     }
 
-                    // Construct Jitsi server address and extract domain.
                     let jitsiServerAddress = "https://jitsi-www." + serverAddress
                     let domain = jitsiServerAddress.replacingOccurrences(of: "https://", with: "")
 
-                    // Prepare other necessary variables.
                     let room = credentials.room
                     let jwt = credentials.token
                     let displayName = userName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
 
-                    // Determine the appropriate language.
                     let supportedLanguages = ["fi", "sv", "en"]
                     let currentLanguage = Locale.current.languageCode ?? "en"
                     let language = supportedLanguages.contains(currentLanguage) ? currentLanguage : "en"
 
-                    // Construct the URL query items, adding displayName and avatarURL if available.
                     var queryItems: [URLQueryItem] = [
                         URLQueryItem(name: "jwt", value: jwt),
                         URLQueryItem(name: "roomName", value: room),
@@ -163,30 +191,24 @@ final class NINGroupChatViewModelImpl: NSObject, NINGroupChatViewModel {
                         queryItems.append(URLQueryItem(name: "avatarURL", value: avatarUrl.absoluteString))
                     }
 
-                    // Build the final URL.
                     var urlComponents = URLComponents(string: "https://ninchat.com/new/jitsi-meet.html")
                     urlComponents?.queryItems = queryItems
 
-                    // Validate and use the final URL.
                     guard let finalUrl = urlComponents?.url else {
                         completion(NinchatError(type: "unknown", props: nil))
                         return
                     }
 
-                    // If we're here, it means the URL is valid, and we can create the URLRequest.
                     let urlRequest = URLRequest(url: finalUrl)
-                    
-                    // Add JitsiVideoWebView
                     let jitsiVideoWebView = parentView.subviews.filter { $0 is JitsiVideoWebView }.first as? JitsiVideoWebView
                     self.jitsiVideoWebView = jitsiVideoWebView
                     jitsiVideoWebView?.eventsDelegate = self
-                    
-                    // Load url request
                     jitsiVideoWebView?.loadJitsiMeeting(for: urlRequest)
                     completion(nil)
                 }
             }
         } catch {
+            self.resetAudioSession()
             completion(error)
         }
     }
@@ -205,6 +227,8 @@ final class NINGroupChatViewModelImpl: NSObject, NINGroupChatViewModel {
         }
         self.jitsiVideoWebView?.eventsDelegate = nil
         self.jitsiVideoWebView = nil
+
+        self.resetAudioSession()
     }
 }
 
