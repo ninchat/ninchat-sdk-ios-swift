@@ -48,7 +48,7 @@ final class NINGroupChatViewModelImpl: NSObject, NINGroupChatViewModel {
     }
 
 
-    /// Select a preferred input port (e.g. .bluetoothHFP, .builtInMic). Call after activating the session.
+    /// Select a preferred input port (e.g. .bluetoothHFP, .builtInMic).
     private func selectPreferredInput(_ port: AVAudioSession.Port) throws {
         guard let target = AVAudioSession.sharedInstance().availableInputs?.first(where: { $0.portType == port }) else { return }
         try AVAudioSession.sharedInstance().setPreferredInput(target)
