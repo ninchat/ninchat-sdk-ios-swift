@@ -37,7 +37,11 @@ final class NINGroupChatViewModelImpl: NSObject, NINGroupChatViewModel {
     private func configureAudioSessionForMic(preferBluetooth: Bool) throws {
         let session = AVAudioSession.sharedInstance()
         var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker]
-        if preferBluetooth { options.insert(.allowBluetooth) }
+        if preferBluetooth {
+            options.insert(.allowBluetooth)
+            options.insert(.allowBluetoothA2DP)
+        }
+
         try session.setCategory(.playAndRecord, options: options)
         try session.setMode(.videoChat)
         try session.setActive(true, options: [])
