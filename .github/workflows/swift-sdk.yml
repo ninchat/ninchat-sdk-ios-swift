@@ -1,4 +1,10 @@
 jobs:
+  on:
+    push:
+      branches:
+        - '*'
+        - '*/*'
+      
   build_test_SDK:
     runs-on: macos-latest
     steps:
