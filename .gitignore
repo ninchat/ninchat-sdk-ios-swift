@@ -14,3 +14,5 @@ NinchatSDKSwiftServerTests/Secrets.plist
 shell.nix
 
 go-sdk/
+
+build/
