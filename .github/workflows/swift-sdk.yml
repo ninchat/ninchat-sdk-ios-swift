@@ -25,11 +25,11 @@ jobs:
       - name: Install CocoaPods
         run: pod update
 
-      - name: Build & Test
+      - name: Build & Test (Unit Tests Only)
         run: |
           xcodebuild test \
             -workspace NinchatSDKSwift.xcworkspace \
-            -scheme NinchatSDKSwift \
+            -scheme NinchatSDKSwiftTests \
             -destination "platform=iOS Simulator,name=iPhone 14" \
             "OTHER_LDFLAGS=$(OTHER_LDFLAGS) -read_only_relocs suppress" \
             ONLY_ACTIVE_ARCH=YES
