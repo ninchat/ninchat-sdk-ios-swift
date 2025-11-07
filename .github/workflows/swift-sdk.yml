@@ -1,26 +1,35 @@
 name: Ninchat SwiftSDK
 
 on:
-    push:
-        branches:
-            - '*'
-            - '*/*'
+  push:
+    branches:
+      - '*'
+      - '*/*'
 
 jobs:
-    build_test_SDK:
-        runs-on: macos-latest
-        steps:
-            - name: Check out repository
-              uses: actions/checkout@v2
+  build_test_SDK:
+    runs-on: macos-13
 
-            - name: Shell Environment
-              run: export SHELL=/bin/bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-            - name: Force Xcode 14
-              run: sudo xcode-select -switch /Applications/Xcode_14.2.app
+      - name: Select Xcode 14.2
+        run: sudo xcode-select -s "/Applications/Xcode_14.2.app/Contents/Developer"
 
-            - name: Install Cocoapods
-              run: pod update
+      - name: Verify Xcode
+        run: |
+          xcode-select -p
+          xcodebuild -version
 
-            - name: Build SDK. Run Tests
-              run: xcodebuild test -workspace NinchatSDKSwift.xcworkspace -scheme NinchatSDKSwift -destination "platform=iOS Simulator,name=iPhone 14" "OTHER_LDFLAGS=\$(OTHER_LDFLAGS) -read_only_relocs suppress" ONLY_ACTIVE_ARCH=YES
+      - name: Install CocoaPods
+        run: pod update
+
+      - name: Build & Test (Unit Tests Only)
+        run: |
+          xcodebuild test \
+            -workspace NinchatSDKSwift.xcworkspace \
+            -scheme NinchatSDKSwiftTests \
+            -destination "platform=iOS Simulator,name=iPhone 14" \
+            "OTHER_LDFLAGS=$(OTHER_LDFLAGS) -read_only_relocs suppress" \
+            ONLY_ACTIVE_ARCH=YES
